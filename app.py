@@ -1,51 +1,31 @@
-# app.py
 import streamlit as st
 import pandas as pd
-import joblib
-import os
-from sklearn.ensemble import RandomForestRegressor
-from src.optimizer import optimize_order
-from src.features import create_lag_features
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
-st.set_page_config(page_title="Supply Chain Optimizer", layout="wide")
+# Title
+st.title("Supply Chain Optimization - Demand Forecasting")
 
-st.title("📦 Supply Chain Optimization Demo")
+# --- Interactive Inputs ---
+stock_levels = st.number_input("Enter Stock Levels", min_value=0, max_value=10000, value=500)
+lead_times = st.number_input("Enter Lead Time (days)", min_value=1, max_value=60, value=10)
+price = st.number_input("Enter Price", min_value=1, max_value=1000, value=100)
 
-# --- Load data ---
-if not os.path.exists("data/synthetic_sales.csv"):
-    st.error("Run notebook first to generate data/synthetic_sales.csv")
-    st.stop()
+# Put inputs in a dataframe (same structure as training features)
+input_data = pd.DataFrame({
+    "Stock levels": [stock_levels],
+    "Lead times": [lead_times],
+    "Price": [price]
+})
 
-df = pd.read_csv("data/synthetic_sales.csv", parse_dates=["date"])
-features_df = create_lag_features(df)
+# --- Load model (simple example: train inside app) ---
+# Normally you'd load a pre-trained model
+X = input_data  # placeholder, replace with your training X
+y = [200]       # placeholder
+model = LinearRegression()
+model.fit(X, y)
 
-# --- Load or train model ---
-if not os.path.exists("model/rf_demand.joblib"):
-    st.warning("Model not found, training now...")
-    X = features_df[[c for c in features_df.columns if c not in ["date","sku","sales"]]]
-    y = features_df["sales"]
-    model = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)
-    model.fit(X, y)
-    os.makedirs("model", exist_ok=True)
-    joblib.dump(model, "model/rf_demand.joblib")
-else:
-    model = joblib.load("model/rf_demand.joblib")
-
-# --- UI: pick SKU ---
-sku = st.selectbox("Choose SKU", sorted(df["sku"].unique()))
-
-sku_df = df[df["sku"]==sku].sort_values("date")
-st.line_chart(sku_df.set_index("date")["sales"])
-
-# --- Forecast next-day demand ---
-latest = features_df[features_df["sku"]==sku].sort_values("date").tail(1)
-latest_features = latest.drop(columns=["date","sku","sales"])
-pred = round(model.predict(latest_features)[0])
-st.metric("Predicted demand for tomorrow", f"{pred} units")
-
-# --- Optimizer ---
-on_hand_input = st.number_input("Current stock (on-hand)", min_value=0, value=50)
-order = optimize_order({sku: pred}, {sku: on_hand_input}, lead_time_days=7,
-                       holding_cost=0.05, shortage_cost=1.0)
-
-st.success(f"Recommended order for {sku}: {order[sku]} units")
+# --- Predict ---
+if st.button("Predict Demand"):
+    prediction = model.predict(input_data)[0]
+    st.success(f"📦 Predicted Demand for Next Week: {prediction:.0f} units")
